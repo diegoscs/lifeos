@@ -1,6 +1,7 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, type NextRequest } from 'next/server'
 import { notion, DB, isFullPage, getText, getSelect, getCheckbox, getNumber } from '@/lib/notion'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { secureJsonResponse, handleApiError } from '@/lib/api-security'
 import type { Habit, HabitCategory, HabitFrequency, HabitTime } from '@/types'
 import type { PageObjectResponse } from '@notionhq/client/build/src/api-endpoints'
 
@@ -24,7 +25,7 @@ function pageToHabit(page: PageObjectResponse): Habit {
 }
 
 // GET /api/notion/habits — retorna hábitos ativos
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     await requireAuth()
 
@@ -35,12 +36,8 @@ export async function GET() {
     })
 
     const habits: Habit[] = response.results.filter(isFullPage).map(pageToHabit)
-    return NextResponse.json(habits)
+    return secureJsonResponse(habits)
   } catch (err) {
-    if (err instanceof Error && err.message === 'Unauthorized') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-    console.error('[habits GET]', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return handleApiError(err, 'habits GET')
   }
 }

@@ -53,14 +53,41 @@ export async function exchangeGmailCode(code: string): Promise<{
     }),
   })
 
-  if (!res.ok) throw new Error('Failed to exchange Gmail code')
-  const tokens = await res.json()
+  if (!res.ok) {
+    const errorText = await res.text()
+    throw new Error(`Failed to exchange Gmail code: ${res.status} ${errorText}`)
+  }
+
+  let tokens: { access_token: string; refresh_token: string; expires_in: number }
+  try {
+    tokens = await res.json()
+  } catch (e) {
+    throw new Error(`Invalid JSON response from Gmail token endpoint: ${e instanceof Error ? e.message : String(e)}`)
+  }
+
+  if (!tokens.access_token || !tokens.refresh_token) {
+    throw new Error('Gmail token response missing access_token or refresh_token')
+  }
 
   // Busca e-mail do usuário
   const userRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
     headers: { Authorization: `Bearer ${tokens.access_token}` },
   })
-  const user = await userRes.json()
+
+  if (!userRes.ok) {
+    throw new Error(`Failed to fetch Gmail user info: ${userRes.status}`)
+  }
+
+  let user: { email?: string }
+  try {
+    user = await userRes.json()
+  } catch (e) {
+    throw new Error(`Invalid JSON response from Gmail userinfo endpoint: ${e instanceof Error ? e.message : String(e)}`)
+  }
+
+  if (!user.email) {
+    throw new Error('Gmail user info response missing email field')
+  }
 
   return { ...tokens, email: user.email }
 }
@@ -77,8 +104,23 @@ async function refreshAccessToken(refreshToken: string): Promise<string> {
       grant_type: 'refresh_token',
     }),
   })
-  if (!res.ok) throw new Error('Failed to refresh Gmail token')
-  const data = await res.json()
+
+  if (!res.ok) {
+    const errorText = await res.text()
+    throw new Error(`Failed to refresh Gmail token: ${res.status} ${errorText}`)
+  }
+
+  let data: { access_token?: string }
+  try {
+    data = await res.json()
+  } catch (e) {
+    throw new Error(`Invalid JSON response from Gmail refresh endpoint: ${e instanceof Error ? e.message : String(e)}`)
+  }
+
+  if (!data.access_token) {
+    throw new Error('Gmail refresh response missing access_token')
+  }
+
   return data.access_token
 }
 
@@ -94,19 +136,32 @@ async function getValidToken(email: string): Promise<string> {
 
   if (error || !data) throw new Error('Gmail not connected')
 
-  const isExpired = new Date(data.expires_at) <= new Date(Date.now() + 60_000)
-  if (!isExpired) return data.access_token
+  const expiresAt = new Date(data.expires_at).getTime()
+  const now = Date.now()
+  const bufferMs = 60_000 // 1 minute buffer
 
-  // Renova
+  // Token ainda é válido
+  if (expiresAt > now + bufferMs) {
+    return data.access_token
+  }
+
+  // Renova token
   const newToken = await refreshAccessToken(data.refresh_token)
-  await supabase
+  const newExpiresAt = new Date(now + 3600_000).toISOString()
+
+  const { error: updateError } = await supabase
     .from('email_tokens')
     .update({
       access_token: newToken,
-      expires_at: new Date(Date.now() + 3600_000).toISOString(),
+      expires_at: newExpiresAt,
     })
     .eq('provider', 'gmail')
     .eq('email', email)
+
+  if (updateError) {
+    console.error('Failed to update Gmail token in Supabase:', updateError)
+    // Ainda retorna o novo token, mesmo se falhar a atualização
+  }
 
   return newToken
 }
@@ -123,34 +178,56 @@ export async function listGmailMessages(
     `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${maxResults}&q=${encodeURIComponent(query)}`,
     { headers: { Authorization: `Bearer ${token}` } }
   )
-  if (!listRes.ok) throw new Error('Failed to list Gmail messages')
-  const listData = await listRes.json()
+
+  if (!listRes.ok) {
+    const errorText = await listRes.text()
+    throw new Error(`Failed to list Gmail messages: ${listRes.status} ${errorText}`)
+  }
+
+  let listData: { messages?: Array<{ id: string }> }
+  try {
+    listData = await listRes.json()
+  } catch (e) {
+    throw new Error(`Invalid JSON response from Gmail list endpoint: ${e instanceof Error ? e.message : String(e)}`)
+  }
+
   const messages: { id: string }[] = listData.messages ?? []
 
-  // Busca detalhes em paralelo (máx 10 por vez)
-  const details = await Promise.all(
+  // Busca detalhes em paralelo (máx 10 por vez) com tratamento de erro
+  const results = await Promise.allSettled(
     messages.slice(0, 10).map((m) =>
       fetch(
         `https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`,
         { headers: { Authorization: `Bearer ${token}` } }
-      ).then((r) => r.json())
+      )
+        .then(async (r) => {
+          if (!r.ok) throw new Error(`Gmail API error: ${r.status}`)
+          return r.json()
+        })
     )
   )
 
-  return details.map((msg) => {
-    const headers: { name: string; value: string }[] = msg.payload?.headers ?? []
-    const get = (name: string) => headers.find((h) => h.name === name)?.value ?? ''
-    return {
-      id: msg.id,
-      threadId: msg.threadId,
-      from: get('From'),
-      subject: get('Subject'),
-      snippet: msg.snippet ?? '',
-      date: get('Date'),
-      isRead: !msg.labelIds?.includes('UNREAD'),
-      labels: msg.labelIds ?? [],
-    }
-  })
+  return results
+    .map((result) => {
+      if (result.status === 'rejected') {
+        console.error('Failed to fetch Gmail message details:', result.reason)
+        return null
+      }
+      const msg = result.value
+      const headers: { name: string; value: string }[] = msg.payload?.headers ?? []
+      const get = (name: string) => headers.find((h) => h.name === name)?.value ?? ''
+      return {
+        id: msg.id,
+        threadId: msg.threadId,
+        from: get('From'),
+        subject: get('Subject'),
+        snippet: msg.snippet ?? '',
+        date: get('Date'),
+        isRead: !msg.labelIds?.includes('UNREAD'),
+        labels: msg.labelIds ?? [],
+      }
+    })
+    .filter((msg): msg is GmailMessage => msg !== null)
 }
 
 // Arquiva mensagem (remove INBOX)

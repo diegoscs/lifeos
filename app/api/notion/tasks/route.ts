@@ -1,8 +1,12 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { notion, DB, isFullPage, getText, getSelect, getCheckbox, getDate } from '@/lib/notion'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { secureJsonResponse, handleApiError, isValidSelect, isValidDate, isValidNotionId } from '@/lib/api-security'
 import type { Task, CreateTaskInput, UpdateTaskInput, TaskStatus, TaskPriority } from '@/types'
 import type { PageObjectResponse } from '@notionhq/client/build/src/api-endpoints'
+
+const VALID_STATUSES: readonly TaskStatus[] = ['A fazer', 'Em andamento', 'Completada', 'Pausada']
+const VALID_PRIORITIES: readonly TaskPriority[] = ['Alta', 'Média', 'Baixa']
 
 async function requireAuth() {
   const supabase = await createServerSupabaseClient()
@@ -13,11 +17,24 @@ async function requireAuth() {
 function pageToTask(page: PageObjectResponse, projectNames: Map<string, string> = new Map()): Task {
   const p = page.properties
   const projectId = p['Project']?.type === 'relation' ? (p['Project'].relation[0]?.id ?? null) : null
+
+  const priority = getSelect(p['Priority'])
+  const status = getSelect(p['Status']) ?? 'A fazer'
+
+  // Validar valores contra enums
+  if (priority && !isValidSelect(priority, VALID_PRIORITIES)) {
+    console.warn(`Invalid priority value: ${priority}`)
+  }
+
+  if (!isValidSelect(status, VALID_STATUSES)) {
+    console.warn(`Invalid status value: ${status}, defaulting to 'A fazer'`)
+  }
+
   return {
     id: page.id,
     title: getText(p['Name']),
-    priority: getSelect(p['Priority']) as Task['priority'],
-    status: (getSelect(p['Status']) ?? 'A fazer') as TaskStatus,
+    priority: (isValidSelect(priority, VALID_PRIORITIES) ? priority : 'Média') as Task['priority'],
+    status: (isValidSelect(status, VALID_STATUSES) ? status : 'A fazer') as TaskStatus,
     dueDate: getDate(p['Due Date']),
     projectId,
     projectName: projectId ? (projectNames.get(projectId) ?? null) : null,
@@ -54,18 +71,38 @@ export async function GET(request: NextRequest) {
     const dueDateFilter = searchParams.get('dueDate')
     const projectFilter = searchParams.get('projectId')
 
-    const filters: object[] = []
-    if (statusFilter) filters.push({ property: 'Status', select: { equals: statusFilter } })
-    if (dueDateFilter) filters.push({ property: 'Due Date', date: { equals: dueDateFilter } })
-    if (projectFilter) filters.push({ property: 'Project', relation: { contains: projectFilter } })
+    // Validar filtros
+    const filters: Parameters<typeof notion.databases.query>[0]['filter'][] = []
+
+    if (statusFilter) {
+      if (!isValidSelect(statusFilter, VALID_STATUSES)) {
+        return secureJsonResponse({ error: 'Invalid status filter value' }, { status: 400 })
+      }
+      filters.push({ property: 'Status', select: { equals: statusFilter } } as Parameters<typeof notion.databases.query>[0]['filter'])
+    }
+
+    if (dueDateFilter) {
+      if (!isValidDate(dueDateFilter)) {
+        return secureJsonResponse({ error: 'Invalid dueDate filter format (expected YYYY-MM-DD)' }, { status: 400 })
+      }
+      filters.push({ property: 'Due Date', date: { equals: dueDateFilter } } as Parameters<typeof notion.databases.query>[0]['filter'])
+    }
+
+    if (projectFilter) {
+      if (!isValidNotionId(projectFilter)) {
+        return secureJsonResponse({ error: 'Invalid projectId filter format' }, { status: 400 })
+      }
+      filters.push({ property: 'Project', relation: { contains: projectFilter } } as Parameters<typeof notion.databases.query>[0]['filter'])
+    }
 
     const response = await notion.databases.query({
       database_id: DB.tasks,
-      filter: filters.length === 0
-        ? undefined
-        : filters.length === 1
-          ? filters[0] as Parameters<typeof notion.databases.query>[0]['filter']
-          : { and: filters } as Parameters<typeof notion.databases.query>[0]['filter'],
+      filter:
+        filters.length === 0
+          ? undefined
+          : filters.length === 1
+            ? filters[0]
+            : ({ and: filters } as Parameters<typeof notion.databases.query>[0]['filter']),
       sorts: [
         { property: 'Complete', direction: 'ascending' },
         { property: 'Priority', direction: 'ascending' },
@@ -78,18 +115,14 @@ export async function GET(request: NextRequest) {
 
     // Resolve nomes dos projetos
     const projectIds = pages
-      .map((p) => p.properties['Project']?.type === 'relation' ? p.properties['Project'].relation[0]?.id : null)
+      .map((p) => (p.properties['Project']?.type === 'relation' ? p.properties['Project'].relation[0]?.id : null))
       .filter((id): id is string => !!id)
     const projectNames = await resolveProjectNames(projectIds)
 
     const tasks: Task[] = pages.map((p) => pageToTask(p, projectNames))
-    return NextResponse.json(tasks)
+    return secureJsonResponse(tasks)
   } catch (err) {
-    if (err instanceof Error && err.message === 'Unauthorized') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-    console.error('[tasks GET]', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return handleApiError(err, 'tasks GET')
   }
 }
 
@@ -98,19 +131,59 @@ export async function POST(request: NextRequest) {
   try {
     await requireAuth()
 
-    const body: CreateTaskInput = await request.json()
-    if (!body.title?.trim()) {
-      return NextResponse.json({ error: 'title is required' }, { status: 400 })
+    let body: unknown
+    try {
+      body = await request.json()
+    } catch (e) {
+      return secureJsonResponse({ error: 'Invalid JSON in request body' }, { status: 400 })
+    }
+
+    if (typeof body !== 'object' || body === null) {
+      return secureJsonResponse({ error: 'Request body must be an object' }, { status: 400 })
+    }
+
+    const input = body as Record<string, unknown>
+
+    // Validar title
+    const title = input.title
+    if (typeof title !== 'string' || !title.trim()) {
+      return secureJsonResponse({ error: 'title is required and must be a non-empty string' }, { status: 400 })
+    }
+
+    if (title.length > 1000) {
+      return secureJsonResponse({ error: 'title must not exceed 1000 characters' }, { status: 400 })
+    }
+
+    // Validar priority se fornecido
+    if (input.priority !== undefined) {
+      if (!isValidSelect(input.priority, VALID_PRIORITIES)) {
+        return secureJsonResponse({ error: `Invalid priority. Must be one of: ${VALID_PRIORITIES.join(', ')}` }, { status: 400 })
+      }
+    }
+
+    // Validar dueDate se fornecido
+    if (input.dueDate !== undefined) {
+      if (!isValidDate(input.dueDate)) {
+        return secureJsonResponse({ error: 'dueDate must be in YYYY-MM-DD format' }, { status: 400 })
+      }
+    }
+
+    // Validar projectId se fornecido
+    if (input.projectId !== undefined) {
+      if (!isValidNotionId(input.projectId)) {
+        return secureJsonResponse({ error: 'Invalid projectId format' }, { status: 400 })
+      }
     }
 
     const properties: Record<string, unknown> = {
-      Name: { title: [{ text: { content: body.title.trim() } }] },
+      Name: { title: [{ text: { content: title.trim() } }] },
       Status: { select: { name: 'A fazer' } },
       Complete: { checkbox: false },
     }
-    if (body.priority) properties['Priority'] = { select: { name: body.priority } }
-    if (body.dueDate) properties['Due Date'] = { date: { start: body.dueDate } }
-    if (body.projectId) properties['Project'] = { relation: [{ id: body.projectId }] }
+
+    if (input.priority) properties['Priority'] = { select: { name: input.priority as TaskPriority } }
+    if (input.dueDate) properties['Due Date'] = { date: { start: input.dueDate as string } }
+    if (input.projectId) properties['Project'] = { relation: [{ id: input.projectId as string }] }
 
     const page = await notion.pages.create({
       parent: { database_id: DB.tasks },
@@ -118,16 +191,12 @@ export async function POST(request: NextRequest) {
     })
 
     if (!isFullPage(page)) {
-      return NextResponse.json({ error: 'Failed to create task' }, { status: 500 })
+      return secureJsonResponse({ error: 'Failed to create task' }, { status: 500 })
     }
 
-    return NextResponse.json(pageToTask(page), { status: 201 })
+    return secureJsonResponse(pageToTask(page), { status: 201 })
   } catch (err) {
-    if (err instanceof Error && err.message === 'Unauthorized') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-    console.error('[tasks POST]', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return handleApiError(err, 'tasks POST')
   }
 }
 
@@ -136,42 +205,75 @@ export async function PATCH(request: NextRequest) {
   try {
     await requireAuth()
 
-    const body: UpdateTaskInput = await request.json()
-    if (!body.id) {
-      return NextResponse.json({ error: 'id is required' }, { status: 400 })
+    let body: unknown
+    try {
+      body = await request.json()
+    } catch (e) {
+      return secureJsonResponse({ error: 'Invalid JSON in request body' }, { status: 400 })
+    }
+
+    if (typeof body !== 'object' || body === null) {
+      return secureJsonResponse({ error: 'Request body must be an object' }, { status: 400 })
+    }
+
+    const input = body as Record<string, unknown>
+
+    // Validar id
+    if (!isValidNotionId(input.id)) {
+      return secureJsonResponse({ error: 'id is required and must be a valid Notion ID' }, { status: 400 })
     }
 
     const properties: Record<string, unknown> = {}
-    if (body.status !== undefined) properties['Status'] = { select: { name: body.status } }
-    if (body.complete !== undefined) {
-      properties['Complete'] = { checkbox: body.complete }
-      if (body.complete && body.status === undefined) {
-        properties['Status'] = { select: { name: 'Completada' as TaskStatus } }
+
+    // Validar e aplicar status
+    if (input.status !== undefined) {
+      if (!isValidSelect(input.status, VALID_STATUSES)) {
+        return secureJsonResponse({ error: `Invalid status. Must be one of: ${VALID_STATUSES.join(', ')}` }, { status: 400 })
       }
-      if (!body.complete && body.status === undefined) {
-        properties['Status'] = { select: { name: 'A fazer' as TaskStatus } }
+      properties['Status'] = { select: { name: input.status as TaskStatus } }
+    }
+
+    // Aplicar complete com status automático
+    if (input.complete !== undefined) {
+      if (typeof input.complete !== 'boolean') {
+        return secureJsonResponse({ error: 'complete must be a boolean' }, { status: 400 })
+      }
+
+      properties['Complete'] = { checkbox: input.complete }
+
+      if (input.status === undefined) {
+        const autoStatus = input.complete ? 'Completada' : 'A fazer'
+        properties['Status'] = { select: { name: autoStatus as TaskStatus } }
       }
     }
-    if (body.priority !== undefined) properties['Priority'] = { select: { name: body.priority as TaskPriority } }
-    if (body.dueDate !== undefined) {
-      properties['Due Date'] = body.dueDate ? { date: { start: body.dueDate } } : { date: null }
+
+    // Validar e aplicar priority
+    if (input.priority !== undefined) {
+      if (!isValidSelect(input.priority, VALID_PRIORITIES)) {
+        return secureJsonResponse({ error: `Invalid priority. Must be one of: ${VALID_PRIORITIES.join(', ')}` }, { status: 400 })
+      }
+      properties['Priority'] = { select: { name: input.priority as TaskPriority } }
+    }
+
+    // Validar e aplicar dueDate
+    if (input.dueDate !== undefined) {
+      if (input.dueDate !== null && !isValidDate(input.dueDate)) {
+        return secureJsonResponse({ error: 'dueDate must be in YYYY-MM-DD format or null' }, { status: 400 })
+      }
+      properties['Due Date'] = input.dueDate ? { date: { start: input.dueDate as string } } : { date: null }
     }
 
     const page = await notion.pages.update({
-      page_id: body.id,
+      page_id: input.id as string,
       properties: properties as Parameters<typeof notion.pages.update>[0]['properties'],
     })
 
     if (!isFullPage(page)) {
-      return NextResponse.json({ error: 'Failed to update task' }, { status: 500 })
+      return secureJsonResponse({ error: 'Failed to update task' }, { status: 500 })
     }
 
-    return NextResponse.json(pageToTask(page))
+    return secureJsonResponse(pageToTask(page))
   } catch (err) {
-    if (err instanceof Error && err.message === 'Unauthorized') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-    console.error('[tasks PATCH]', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return handleApiError(err, 'tasks PATCH')
   }
 }

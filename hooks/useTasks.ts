@@ -3,11 +3,51 @@
 import useSWR from 'swr'
 import type { Task, CreateTaskInput, UpdateTaskInput } from '@/types'
 
-const fetcher = (url: string) =>
-  fetch(url).then((r) => {
-    if (!r.ok) throw new Error('Failed to fetch')
-    return r.json()
-  })
+/**
+ * Erros diferenciados da API
+ */
+class ApiError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+    public details?: unknown
+  ) {
+    super(message)
+    this.name = 'ApiError'
+  }
+}
+
+/**
+ * Fetcher com error handling diferenciado
+ */
+const fetcher = async (url: string): Promise<Task[]> => {
+  const res = await fetch(url)
+
+  if (!res.ok) {
+    let details: unknown
+    try {
+      details = await res.json()
+    } catch {
+      details = await res.text()
+    }
+
+    throw new ApiError(
+      `Failed to fetch tasks: ${res.statusText}`,
+      res.status,
+      details
+    )
+  }
+
+  try {
+    return await res.json()
+  } catch (e) {
+    throw new ApiError(
+      'Failed to parse tasks response',
+      500,
+      e instanceof Error ? e.message : String(e)
+    )
+  }
+}
 
 interface UseTasksOptions {
   status?: string
@@ -26,10 +66,52 @@ export function useTasks(options: UseTasksOptions = {}) {
 
   const { data, error, isLoading, mutate } = useSWR<Task[]>(key, fetcher, {
     revalidateOnFocus: false,
+    shouldRetryOnError: true,
+    errorRetryCount: 3,
+    errorRetryInterval: 5000,
+    dedupingInterval: 60000,
   })
 
+  /**
+   * Realiza requisição com erro handling
+   */
+  const apiRequest = async (
+    method: 'POST' | 'PATCH',
+    body: unknown
+  ): Promise<Task> => {
+    const res = await fetch('/api/notion/tasks', {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+
+    if (!res.ok) {
+      let details: unknown
+      try {
+        details = await res.json()
+      } catch {
+        details = await res.text()
+      }
+
+      throw new ApiError(
+        `Failed to ${method === 'POST' ? 'create' : 'update'} task`,
+        res.status,
+        details
+      )
+    }
+
+    try {
+      return await res.json()
+    } catch (e) {
+      throw new ApiError(
+        'Failed to parse task response',
+        500,
+        e instanceof Error ? e.message : String(e)
+      )
+    }
+  }
+
   async function createTask(input: CreateTaskInput) {
-    // Optimistic update
     const optimistic: Task = {
       id: `temp-${Date.now()}`,
       title: input.title,
@@ -41,41 +123,48 @@ export function useTasks(options: UseTasksOptions = {}) {
       complete: false,
     }
 
-    await mutate(
-      async (current = []) => {
-        const res = await fetch('/api/notion/tasks', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(input),
-        })
-        if (!res.ok) throw new Error('Failed to create task')
-        const created: Task = await res.json()
-        return [...current, created]
-      },
-      { optimisticData: (current = []) => [...current, optimistic], rollbackOnError: true }
-    )
+    try {
+      await mutate(
+        async (current = []) => {
+          const created = await apiRequest('POST', input)
+          return [...current, created]
+        },
+        {
+          optimisticData: (current = []) => [...current, optimistic],
+          rollbackOnError: true,
+        }
+      )
+    } catch (err) {
+      if (err instanceof ApiError) {
+        console.error(`[createTask] ${err.status}: ${err.message}`, err.details)
+      } else {
+        console.error('[createTask]', err)
+      }
+      throw err
+    }
   }
 
   async function updateTask(input: UpdateTaskInput) {
-    await mutate(
-      async (current = []) => {
-        const res = await fetch('/api/notion/tasks', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(input),
-        })
-        if (!res.ok) throw new Error('Failed to update task')
-        const updated: Task = await res.json()
-        return current.map((t) => (t.id === updated.id ? updated : t))
-      },
-      {
-        optimisticData: (current = []) =>
-          current.map((t) =>
-            t.id === input.id ? { ...t, ...input } : t
-          ),
-        rollbackOnError: true,
+    try {
+      await mutate(
+        async (current = []) => {
+          const updated = await apiRequest('PATCH', input)
+          return current.map((t) => (t.id === updated.id ? updated : t))
+        },
+        {
+          optimisticData: (current = []) =>
+            current.map((t) => (t.id === input.id ? { ...t, ...input } : t)),
+          rollbackOnError: true,
+        }
+      )
+    } catch (err) {
+      if (err instanceof ApiError) {
+        console.error(`[updateTask] ${err.status}: ${err.message}`, err.details)
+      } else {
+        console.error('[updateTask]', err)
       }
-    )
+      throw err
+    }
   }
 
   async function toggleComplete(task: Task) {
@@ -90,6 +179,7 @@ export function useTasks(options: UseTasksOptions = {}) {
     tasks: data ?? [],
     isLoading,
     isError: !!error,
+    error: error instanceof ApiError ? error : undefined,
     createTask,
     updateTask,
     toggleComplete,

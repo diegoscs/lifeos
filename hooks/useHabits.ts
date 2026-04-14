@@ -4,19 +4,64 @@ import useSWR from 'swr'
 import { format, subDays } from 'date-fns'
 import type { Habit, HabitRecord, CreateRecordInput } from '@/types'
 
-const fetcher = (url: string) =>
-  fetch(url).then((r) => {
-    if (!r.ok) throw new Error('Failed to fetch')
-    return r.json()
-  })
+/**
+ * Erros diferenciados da API
+ */
+class ApiError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+    public details?: unknown
+  ) {
+    super(message)
+    this.name = 'ApiError'
+  }
+}
+
+/**
+ * Fetcher com error handling diferenciado
+ */
+const createFetcher = <T,>(endpoint: string) => async (url: string): Promise<T> => {
+  const res = await fetch(url)
+
+  if (!res.ok) {
+    let details: unknown
+    try {
+      details = await res.json()
+    } catch {
+      details = await res.text()
+    }
+
+    throw new ApiError(
+      `Failed to fetch ${endpoint}: ${res.statusText}`,
+      res.status,
+      details
+    )
+  }
+
+  try {
+    return await res.json()
+  } catch (e) {
+    throw new ApiError(
+      `Failed to parse ${endpoint} response`,
+      500,
+      e instanceof Error ? e.message : String(e)
+    )
+  }
+}
 
 export function useHabits() {
   const { data, error, isLoading } = useSWR<Habit[]>(
     '/api/notion/habits',
-    fetcher,
-    { revalidateOnFocus: false }
+    createFetcher('habits'),
+    {
+      revalidateOnFocus: false,
+      shouldRetryOnError: true,
+      errorRetryCount: 3,
+      errorRetryInterval: 5000,
+    }
   )
-  return { habits: data ?? [], isLoading, isError: !!error }
+  return { habits: data ?? [], isLoading, isError: !!error, error: error instanceof ApiError ? error : undefined }
 }
 
 export function useHabitRecords(days = 7) {
@@ -26,46 +71,96 @@ export function useHabitRecords(days = 7) {
 
   const { data, error, isLoading, mutate } = useSWR<HabitRecord[]>(
     key,
-    fetcher,
-    { revalidateOnFocus: false }
+    createFetcher('habit records'),
+    {
+      revalidateOnFocus: false,
+      shouldRetryOnError: true,
+      errorRetryCount: 3,
+      errorRetryInterval: 5000,
+    }
   )
+
+  /**
+   * Realiza requisição com erro handling
+   */
+  const apiRequest = async (
+    method: 'POST' | 'PATCH',
+    body: unknown
+  ): Promise<HabitRecord> => {
+    const res = await fetch('/api/notion/records', {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+
+    if (!res.ok) {
+      let details: unknown
+      try {
+        details = await res.json()
+      } catch {
+        details = await res.text()
+      }
+
+      throw new ApiError(
+        `Failed to ${method === 'POST' ? 'check in' : 'update'} record`,
+        res.status,
+        details
+      )
+    }
+
+    try {
+      return await res.json()
+    } catch (e) {
+      throw new ApiError(
+        'Failed to parse record response',
+        500,
+        e instanceof Error ? e.message : String(e)
+      )
+    }
+  }
 
   // Cria novo registro (quando não existe nenhum para aquele dia/hábito)
   async function checkIn(input: CreateRecordInput) {
-    await mutate(
-      async (current = []) => {
-        const res = await fetch('/api/notion/records', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(input),
-        })
-        if (!res.ok) throw new Error('Failed to check in')
-        const created: HabitRecord = await res.json()
-        return [created, ...current]
-      },
-      { rollbackOnError: true }
-    )
+    try {
+      await mutate(
+        async (current = []) => {
+          const created = await apiRequest('POST', input)
+          return [created, ...current]
+        },
+        { rollbackOnError: true }
+      )
+    } catch (err) {
+      if (err instanceof ApiError) {
+        console.error(`[checkIn] ${err.status}: ${err.message}`, err.details)
+      } else {
+        console.error('[checkIn]', err)
+      }
+      throw err
+    }
   }
 
   // Atualiza registro existente (quando já existe um para aquele dia/hábito)
   async function updateRecord(id: string, completed: boolean, failReason?: string) {
-    await mutate(
-      async (current = []) => {
-        const res = await fetch('/api/notion/records', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id, completed, failReason }),
-        })
-        if (!res.ok) throw new Error('Failed to update record')
-        const updated: HabitRecord = await res.json()
-        return current.map((r) => (r.id === id ? updated : r))
-      },
-      {
-        optimisticData: (current = []) =>
-          current.map((r) => r.id === id ? { ...r, completed, failReason: failReason ?? null } : r),
-        rollbackOnError: true,
+    try {
+      await mutate(
+        async (current = []) => {
+          const updated = await apiRequest('PATCH', { id, completed, failReason })
+          return current.map((r) => (r.id === id ? updated : r))
+        },
+        {
+          optimisticData: (current = []) =>
+            current.map((r) => (r.id === id ? { ...r, completed, failReason: failReason ?? null } : r)),
+          rollbackOnError: true,
+        }
+      )
+    } catch (err) {
+      if (err instanceof ApiError) {
+        console.error(`[updateRecord] ${err.status}: ${err.message}`, err.details)
+      } else {
+        console.error('[updateRecord]', err)
       }
-    )
+      throw err
+    }
   }
 
   function getRecord(habitName: string, date: string) {
@@ -82,6 +177,7 @@ export function useHabitRecords(days = 7) {
     records: data ?? [],
     isLoading,
     isError: !!error,
+    error: error instanceof ApiError ? error : undefined,
     checkIn,
     updateRecord,
     getRecord,

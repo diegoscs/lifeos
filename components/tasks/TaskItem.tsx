@@ -3,13 +3,8 @@
 import { clsx } from 'clsx'
 import { format, parseISO, isToday, isPast } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
+import { priorityColors } from '@/lib/colors'
 import type { Task, TaskStatus } from '@/types'
-
-const priorityBar: Record<string, string> = {
-  Alta:  'bg-red-500',
-  Média: 'bg-yellow-500',
-  Baixa: 'bg-neutral-700',
-}
 
 const statusBadge: Record<TaskStatus, { label: string; className: string }> = {
   'Em andamento': { label: 'Em andamento', className: 'bg-blue-900/50 text-blue-400 border-blue-900' },
@@ -25,7 +20,7 @@ interface TaskItemProps {
 }
 
 export default function TaskItem({ task, onToggle, showStatus = false }: TaskItemProps) {
-  const barColor = task.priority ? priorityBar[task.priority] : 'bg-neutral-800'
+  const barColor = task.priority ? priorityColors[task.priority] : 'bg-neutral-800'
   const isComplete = task.complete
 
   const dueDateLabel = task.dueDate
