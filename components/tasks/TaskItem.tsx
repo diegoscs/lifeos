@@ -1,14 +1,20 @@
 'use client'
 
 import { clsx } from 'clsx'
-import { format, parseISO } from 'date-fns'
+import { format, parseISO, isToday, isPast } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import type { Task } from '@/types'
 
 const priorityBar: Record<string, string> = {
   Alta:  'bg-red-500',
   Média: 'bg-yellow-500',
-  Baixa: 'bg-neutral-600',
+  Baixa: 'bg-neutral-700',
+}
+
+const priorityDot: Record<string, string> = {
+  Alta:  'text-red-400',
+  Média: 'text-yellow-400',
+  Baixa: 'text-neutral-600',
 }
 
 interface TaskItemProps {
@@ -19,6 +25,15 @@ interface TaskItemProps {
 export default function TaskItem({ task, onToggle }: TaskItemProps) {
   const barColor = task.priority ? priorityBar[task.priority] : 'bg-neutral-800'
   const isComplete = task.complete
+
+  const dueDateLabel = task.dueDate
+    ? (() => {
+        const d = parseISO(task.dueDate)
+        if (isToday(d)) return { label: 'Hoje', color: 'text-blue-400' }
+        if (isPast(d) && !isComplete) return { label: format(d, 'd MMM', { locale: ptBR }), color: 'text-red-400' }
+        return { label: format(d, 'd MMM', { locale: ptBR }), color: 'text-neutral-600' }
+      })()
+    : null
 
   return (
     <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-neutral-900 group transition-colors">
@@ -32,7 +47,7 @@ export default function TaskItem({ task, onToggle }: TaskItemProps) {
           'w-4 h-4 rounded border shrink-0 flex items-center justify-center transition-colors',
           isComplete
             ? 'bg-neutral-600 border-neutral-600'
-            : 'border-neutral-700 hover:border-neutral-500'
+            : 'border-neutral-700 hover:border-neutral-400'
         )}
       >
         {isComplete && (
@@ -43,25 +58,33 @@ export default function TaskItem({ task, onToggle }: TaskItemProps) {
       </button>
 
       {/* título */}
-      <span
-        className={clsx(
-          'flex-1 text-sm min-w-0 truncate',
-          isComplete ? 'line-through text-neutral-600' : 'text-neutral-200'
-        )}
-      >
+      <span className={clsx(
+        'flex-1 text-sm min-w-0 truncate',
+        isComplete ? 'line-through text-neutral-600' : 'text-neutral-200'
+      )}>
         {task.title}
       </span>
 
       {/* meta info */}
       <div className="flex items-center gap-2 shrink-0">
+        {/* badge projeto */}
         {task.projectName && (
-          <span className="text-xs text-neutral-600 hidden group-hover:inline">
+          <span className="px-1.5 py-0.5 rounded text-[10px] bg-neutral-800 text-neutral-500 border border-neutral-800 group-hover:border-neutral-700 transition-colors truncate max-w-[80px]">
             {task.projectName}
           </span>
         )}
-        {task.dueDate && (
-          <span className="text-xs text-neutral-600">
-            {format(parseISO(task.dueDate), 'd MMM', { locale: ptBR })}
+
+        {/* prioridade — só no hover */}
+        {task.priority && !isComplete && (
+          <span className={clsx('text-[10px] hidden group-hover:inline', priorityDot[task.priority])}>
+            {task.priority}
+          </span>
+        )}
+
+        {/* data */}
+        {dueDateLabel && (
+          <span className={clsx('text-xs', dueDateLabel.color)}>
+            {dueDateLabel.label}
           </span>
         )}
       </div>

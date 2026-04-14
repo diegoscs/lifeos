@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST /api/notion/records
+// POST /api/notion/records — cria novo registro
 export async function POST(request: NextRequest) {
   try {
     await requireAuth()
@@ -97,6 +97,42 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
     console.error('[records POST]', err)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+// PATCH /api/notion/records — atualiza registro existente
+export async function PATCH(request: NextRequest) {
+  try {
+    await requireAuth()
+
+    const body: { id: string; completed: boolean; failReason?: string } = await request.json()
+    if (!body.id) {
+      return NextResponse.json({ error: 'id is required' }, { status: 400 })
+    }
+
+    const page = await notion.pages.update({
+      page_id: body.id,
+      properties: {
+        Concluído: { checkbox: body.completed },
+        'Motivo falha': {
+          rich_text: body.failReason
+            ? [{ text: { content: body.failReason } }]
+            : [],
+        },
+      },
+    })
+
+    if (!isFullPage(page)) {
+      return NextResponse.json({ error: 'Failed to update record' }, { status: 500 })
+    }
+
+    return NextResponse.json(pageToRecord(page))
+  } catch (err) {
+    if (err instanceof Error && err.message === 'Unauthorized') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    console.error('[records PATCH]', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

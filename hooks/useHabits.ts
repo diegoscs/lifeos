@@ -10,22 +10,15 @@ const fetcher = (url: string) =>
     return r.json()
   })
 
-// Hábitos ativos
 export function useHabits() {
   const { data, error, isLoading } = useSWR<Habit[]>(
     '/api/notion/habits',
     fetcher,
     { revalidateOnFocus: false }
   )
-
-  return {
-    habits: data ?? [],
-    isLoading,
-    isError: !!error,
-  }
+  return { habits: data ?? [], isLoading, isError: !!error }
 }
 
-// Registros dos últimos N dias (padrão: 7)
 export function useHabitRecords(days = 7) {
   const endDate = format(new Date(), 'yyyy-MM-dd')
   const startDate = format(subDays(new Date(), days - 1), 'yyyy-MM-dd')
@@ -37,6 +30,7 @@ export function useHabitRecords(days = 7) {
     { revalidateOnFocus: false }
   )
 
+  // Cria novo registro (quando não existe nenhum para aquele dia/hábito)
   async function checkIn(input: CreateRecordInput) {
     await mutate(
       async (current = []) => {
@@ -53,14 +47,31 @@ export function useHabitRecords(days = 7) {
     )
   }
 
-  // Retorna se um hábito foi registrado em uma data específica
-  function getRecord(habitName: string, date: string) {
-    return (data ?? []).find(
-      (r) => r.habit === habitName && r.date === date
-    ) ?? null
+  // Atualiza registro existente (quando já existe um para aquele dia/hábito)
+  async function updateRecord(id: string, completed: boolean, failReason?: string) {
+    await mutate(
+      async (current = []) => {
+        const res = await fetch('/api/notion/records', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, completed, failReason }),
+        })
+        if (!res.ok) throw new Error('Failed to update record')
+        const updated: HabitRecord = await res.json()
+        return current.map((r) => (r.id === id ? updated : r))
+      },
+      {
+        optimisticData: (current = []) =>
+          current.map((r) => r.id === id ? { ...r, completed, failReason: failReason ?? null } : r),
+        rollbackOnError: true,
+      }
+    )
   }
 
-  // Retorna registros de um hábito ordenados por data desc
+  function getRecord(habitName: string, date: string) {
+    return (data ?? []).find((r) => r.habit === habitName && r.date === date) ?? null
+  }
+
   function getRecordsForHabit(habitName: string) {
     return (data ?? [])
       .filter((r) => r.habit === habitName)
@@ -72,6 +83,7 @@ export function useHabitRecords(days = 7) {
     isLoading,
     isError: !!error,
     checkIn,
+    updateRecord,
     getRecord,
     getRecordsForHabit,
     mutate,

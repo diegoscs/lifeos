@@ -9,67 +9,92 @@ const FAIL_REASONS = ['Dormiu tarde', 'Compromisso', 'Esqueceu', 'Não quis']
 interface HabitCheckInProps {
   habit: Habit
   record: HabitRecord | null
-  onCheckIn: (habitName: string, date: string, completed: boolean, failReason?: string) => Promise<void>
   date: string
+  onCheckIn: (habitName: string, date: string, completed: boolean, failReason?: string) => Promise<void>
+  onUpdate: (id: string, completed: boolean, failReason?: string) => Promise<void>
 }
 
-export default function HabitCheckIn({ habit, record, onCheckIn, date }: HabitCheckInProps) {
-  const [showModal, setShowModal] = useState(false)
+type ModalMode = 'fail' | 'undo' | null
+
+export default function HabitCheckIn({ habit, record, date, onCheckIn, onUpdate }: HabitCheckInProps) {
+  const [modalMode, setModalMode] = useState<ModalMode>(null)
   const [loading, setLoading] = useState(false)
 
   const isDone = record?.completed === true
   const isFailed = record !== null && record.completed === false
 
-  async function handleClick() {
-    if (loading) return
-    if (isDone || isFailed) return // já registrado
-
-    // Clique = concluído
+  async function withLoading(fn: () => Promise<void>) {
     setLoading(true)
-    try {
-      await onCheckIn(habit.name, date, true)
-    } finally {
-      setLoading(false)
-    }
+    try { await fn() } finally { setLoading(false) }
   }
 
+  // Clique no círculo verde (concluído) → abre modal para desfazer
+  function handleDoneClick() {
+    setModalMode('undo')
+  }
+
+  // Clique no círculo vermelho (falhou) → marca como concluído diretamente
+  async function handleFailedClick() {
+    if (!record) return
+    await withLoading(() => onUpdate(record.id, true))
+  }
+
+  // Clique no círculo vazio → marca como concluído
+  async function handleEmptyClick() {
+    await withLoading(() => onCheckIn(habit.name, date, true))
+  }
+
+  // Modal: motivo de falha (novo registro ou update)
   async function handleFailReason(reason: string) {
-    setShowModal(false)
-    setLoading(true)
-    try {
-      await onCheckIn(habit.name, date, false, reason)
-    } finally {
-      setLoading(false)
-    }
+    setModalMode(null)
+    await withLoading(() =>
+      record
+        ? onUpdate(record.id, false, reason)
+        : onCheckIn(habit.name, date, false, reason)
+    )
   }
 
-  async function handleSkip() {
-    setShowModal(false)
-    setLoading(true)
-    try {
-      await onCheckIn(habit.name, date, false)
-    } finally {
-      setLoading(false)
-    }
+  async function handleSkipReason() {
+    setModalMode(null)
+    await withLoading(() =>
+      record
+        ? onUpdate(record.id, false)
+        : onCheckIn(habit.name, date, false)
+    )
+  }
+
+  // Modal: desfazer (marcar como não feito)
+  function handleUndoRequest() {
+    setModalMode('undo')
   }
 
   return (
     <>
-      <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-neutral-900 group transition-colors">
+      <div className="flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-neutral-900 group transition-colors">
         {/* círculo de check-in */}
         <button
-          onClick={handleClick}
-          disabled={loading || isDone || isFailed}
+          onClick={
+            loading ? undefined
+              : isDone ? handleDoneClick
+              : isFailed ? handleFailedClick
+              : handleEmptyClick
+          }
+          disabled={loading}
+          title={
+            isDone ? 'Clique para desfazer'
+              : isFailed ? 'Clique para marcar como feito'
+              : 'Marcar como feito'
+          }
           className={clsx(
-            'w-6 h-6 rounded-full border-2 shrink-0 flex items-center justify-center transition-all',
-            isDone && 'border-green-500 bg-green-500',
-            isFailed && 'border-red-800 bg-red-900/40',
-            !isDone && !isFailed && 'border-neutral-700 hover:border-neutral-400',
-            loading && 'opacity-50'
+            'w-7 h-7 rounded-full border-2 shrink-0 flex items-center justify-center transition-all',
+            isDone && 'border-green-500 bg-green-500 hover:bg-green-600 hover:border-green-600',
+            isFailed && 'border-red-800 bg-red-900/40 hover:bg-red-800/60 hover:border-red-700',
+            !isDone && !isFailed && 'border-neutral-700 hover:border-white hover:scale-110',
+            loading && 'opacity-40 cursor-wait'
           )}
         >
           {isDone && (
-            <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 10 10">
+            <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 10 10">
               <path d="M1.5 5l2.5 2.5 4.5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           )}
@@ -80,39 +105,42 @@ export default function HabitCheckIn({ habit, record, onCheckIn, date }: HabitCh
           )}
         </button>
 
-        {/* nome */}
-        <span className={clsx(
-          'flex-1 text-sm',
-          isDone ? 'text-neutral-500 line-through' : 'text-neutral-200'
-        )}>
-          {habit.name}
-        </span>
+        {/* nome + horário */}
+        <div className="flex-1 min-w-0">
+          <span className={clsx(
+            'text-sm block truncate',
+            isDone ? 'text-neutral-500 line-through' : 'text-neutral-200'
+          )}>
+            {habit.name}
+          </span>
+          {habit.time && habit.time !== 'Qualquer hora' && (
+            <span className="text-[10px] text-neutral-700">{habit.time}</span>
+          )}
+        </div>
 
-        {/* categoria */}
-        {habit.category && (
-          <span className="text-xs text-neutral-600 hidden group-hover:inline">{habit.category}</span>
-        )}
-
-        {/* botão "não fiz" — só aparece se não registrado */}
-        {!isDone && !isFailed && (
-          <button
-            onClick={() => setShowModal(true)}
-            className="text-xs text-neutral-700 hover:text-neutral-500 hidden group-hover:inline transition-colors"
-          >
-            não fiz
-          </button>
-        )}
-
-        {/* motivo da falha */}
-        {isFailed && record?.failReason && (
-          <span className="text-xs text-red-800">{record.failReason}</span>
-        )}
+        {/* ações no hover */}
+        <div className="flex items-center gap-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+          {!isFailed && (
+            <button
+              onClick={() => setModalMode('fail')}
+              className="text-xs text-neutral-700 hover:text-neutral-400 transition-colors"
+            >
+              não fiz
+            </button>
+          )}
+          {isFailed && record?.failReason && (
+            <span className="text-xs text-red-900">{record.failReason}</span>
+          )}
+          {habit.category && (
+            <span className="text-xs text-neutral-700">{habit.category}</span>
+          )}
+        </div>
       </div>
 
-      {/* Modal motivo */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5 w-72 space-y-4">
+      {/* Modal motivo de falha */}
+      {(modalMode === 'fail') && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70" onClick={() => setModalMode(null)}>
+          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5 w-72 space-y-4" onClick={(e) => e.stopPropagation()}>
             <p className="text-sm text-neutral-300 font-medium">
               Por que não fez <span className="text-white">{habit.name}</span>?
             </p>
@@ -128,11 +156,36 @@ export default function HabitCheckIn({ habit, record, onCheckIn, date }: HabitCh
               ))}
             </div>
             <button
-              onClick={handleSkip}
-              className="w-full text-xs text-neutral-600 hover:text-neutral-400 transition-colors pt-1"
+              onClick={handleSkipReason}
+              className="w-full text-xs text-neutral-600 hover:text-neutral-400 transition-colors"
             >
               Pular (sem motivo)
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal desfazer */}
+      {modalMode === 'undo' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70" onClick={() => setModalMode(null)}>
+          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5 w-64 space-y-4" onClick={(e) => e.stopPropagation()}>
+            <p className="text-sm text-neutral-300">
+              Desfazer <span className="text-white">{habit.name}</span>?
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setModalMode(null); if (record) withLoading(() => onUpdate(record.id, false)) }}
+                className="flex-1 px-3 py-2 rounded-lg bg-red-900/40 hover:bg-red-900/60 text-xs text-red-300 transition-colors"
+              >
+                Não fiz
+              </button>
+              <button
+                onClick={() => setModalMode(null)}
+                className="flex-1 px-3 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs text-neutral-400 transition-colors"
+              >
+                Cancelar
+              </button>
+            </div>
           </div>
         </div>
       )}

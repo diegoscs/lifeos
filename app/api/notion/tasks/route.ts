@@ -10,18 +10,38 @@ async function requireAuth() {
   if (!user) throw new Error('Unauthorized')
 }
 
-function pageToTask(page: PageObjectResponse): Task {
+function pageToTask(page: PageObjectResponse, projectNames: Map<string, string> = new Map()): Task {
   const p = page.properties
+  const projectId = p['Project']?.type === 'relation' ? (p['Project'].relation[0]?.id ?? null) : null
   return {
     id: page.id,
     title: getText(p['Name']),
     priority: getSelect(p['Priority']) as Task['priority'],
     status: (getSelect(p['Status']) ?? 'A fazer') as TaskStatus,
     dueDate: getDate(p['Due Date']),
-    projectId: p['Project']?.type === 'relation' ? (p['Project'].relation[0]?.id ?? null) : null,
-    projectName: null,
+    projectId,
+    projectName: projectId ? (projectNames.get(projectId) ?? null) : null,
     complete: getCheckbox(p['Complete']),
   }
+}
+
+// Busca nomes dos projetos em paralelo dado um set de IDs
+async function resolveProjectNames(projectIds: string[]): Promise<Map<string, string>> {
+  const unique = [...new Set(projectIds)]
+  if (unique.length === 0) return new Map()
+
+  const results = await Promise.allSettled(
+    unique.map((id) => notion.pages.retrieve({ page_id: id }))
+  )
+
+  const map = new Map<string, string>()
+  results.forEach((result, i) => {
+    if (result.status === 'fulfilled' && isFullPage(result.value)) {
+      const name = getText(result.value.properties['Nome'])
+      map.set(unique[i], name)
+    }
+  })
+  return map
 }
 
 // GET /api/notion/tasks
@@ -47,13 +67,22 @@ export async function GET(request: NextRequest) {
           ? filters[0] as Parameters<typeof notion.databases.query>[0]['filter']
           : { and: filters } as Parameters<typeof notion.databases.query>[0]['filter'],
       sorts: [
+        { property: 'Complete', direction: 'ascending' },
         { property: 'Priority', direction: 'ascending' },
         { property: 'Due Date', direction: 'ascending' },
       ],
       page_size: 100,
     })
 
-    const tasks: Task[] = response.results.filter(isFullPage).map(pageToTask)
+    const pages = response.results.filter(isFullPage)
+
+    // Resolve nomes dos projetos
+    const projectIds = pages
+      .map((p) => p.properties['Project']?.type === 'relation' ? p.properties['Project'].relation[0]?.id : null)
+      .filter((id): id is string => !!id)
+    const projectNames = await resolveProjectNames(projectIds)
+
+    const tasks: Task[] = pages.map((p) => pageToTask(p, projectNames))
     return NextResponse.json(tasks)
   } catch (err) {
     if (err instanceof Error && err.message === 'Unauthorized') {
@@ -118,6 +147,9 @@ export async function PATCH(request: NextRequest) {
       properties['Complete'] = { checkbox: body.complete }
       if (body.complete && body.status === undefined) {
         properties['Status'] = { select: { name: 'Completada' as TaskStatus } }
+      }
+      if (!body.complete && body.status === undefined) {
+        properties['Status'] = { select: { name: 'A fazer' as TaskStatus } }
       }
     }
     if (body.priority !== undefined) properties['Priority'] = { select: { name: body.priority as TaskPriority } }

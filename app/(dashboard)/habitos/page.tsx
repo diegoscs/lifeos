@@ -23,42 +23,50 @@ export default function HabitosPage() {
   const [activeTab, setActiveTab] = useState<Tab>('hoje')
 
   const { habits, isLoading: habitsLoading } = useHabits()
-  const { records: weekRecords, isLoading: weekLoading, checkIn } = useHabitRecords(7)
+  const { records: weekRecords, isLoading: weekLoading, checkIn: checkInRecord, updateRecord } = useHabitRecords(7)
   const { records: monthRecords, isLoading: monthLoading } = useHabitRecords(30)
 
   const today = format(new Date(), 'yyyy-MM-dd')
   const isLoading = habitsLoading || weekLoading
 
-  async function handleCheckIn(habitName: string, date: string, completed: boolean, failReason?: string) {
-    await checkIn({ habit: habitName, date, completed, failReason })
-  }
+  // Contagem de hábitos concluídos hoje
+  const todayDone = habits.filter((h) =>
+    weekRecords.some((r) => r.habit === h.name && r.date === today && r.completed)
+  ).length
 
   return (
     <div className="max-w-2xl space-y-4">
       {/* Tabs */}
-      <div className="flex gap-1 bg-neutral-900 rounded-lg p-1 w-fit">
-        {tabs.map(({ key, label }) => (
-          <button
-            key={key}
-            onClick={() => setActiveTab(key)}
-            className={clsx(
-              'px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
-              activeTab === key
-                ? 'bg-neutral-700 text-white'
-                : 'text-neutral-500 hover:text-neutral-300'
-            )}
-          >
-            {label}
-          </button>
-        ))}
+      <div className="flex items-center justify-between">
+        <div className="flex gap-1 bg-neutral-900 rounded-lg p-1 w-fit">
+          {tabs.map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => setActiveTab(key)}
+              className={clsx(
+                'px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
+                activeTab === key
+                  ? 'bg-neutral-700 text-white'
+                  : 'text-neutral-500 hover:text-neutral-300'
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* progresso de hoje */}
+        {!isLoading && activeTab === 'hoje' && habits.length > 0 && (
+          <span className="text-xs text-neutral-600">
+            {todayDone}/{habits.length} hoje
+          </span>
+        )}
       </div>
 
       {/* Conteúdo */}
       <div className="rounded-xl border border-neutral-900 bg-neutral-950 p-4">
         {isLoading && (
-          <div className="flex items-center justify-center py-12">
-            <Spinner />
-          </div>
+          <div className="flex items-center justify-center py-12"><Spinner /></div>
         )}
 
         {!isLoading && habits.length === 0 && (
@@ -79,8 +87,11 @@ export default function HabitosPage() {
                   key={habit.id}
                   habit={habit}
                   record={record}
-                  onCheckIn={handleCheckIn}
                   date={today}
+                  onCheckIn={(habitName, date, completed, failReason) =>
+                    checkInRecord({ habit: habitName, date, completed, failReason })
+                  }
+                  onUpdate={updateRecord}
                 />
               )
             })}
