@@ -1,6 +1,6 @@
 'use client'
 
-import { format, subDays, parseISO } from 'date-fns'
+import { format, startOfWeek, addDays, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { clsx } from 'clsx'
 import type { Habit, HabitRecord } from '@/types'
@@ -12,7 +12,8 @@ interface WeekGridProps {
 
 export default function WeekGrid({ habits, records }: WeekGridProps) {
   const today = new Date()
-  const days = Array.from({ length: 7 }, (_, i) => subDays(today, 6 - i))
+  const monday = startOfWeek(today, { weekStartsOn: 1 })
+  const days = Array.from({ length: 7 }, (_, i) => addDays(monday, i))
 
   function getRecord(habitName: string, date: Date): HabitRecord | null {
     const dateStr = format(date, 'yyyy-MM-dd')

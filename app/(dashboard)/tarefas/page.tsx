@@ -9,13 +9,11 @@ import TaskInput from '@/components/tasks/TaskInput'
 import Spinner from '@/components/ui/Spinner'
 import type { Task, TaskStatus } from '@/types'
 
-type Tab = 'hoje' | 'todas' | 'backlog' | 'someday'
+type Tab = 'hoje' | 'todas'
 
 const tabs: { key: Tab; label: string }[] = [
-  { key: 'hoje',    label: 'Hoje' },
-  { key: 'todas',   label: 'Todas' },
-  { key: 'backlog', label: 'Backlog' },
-  { key: 'someday', label: 'Algum dia' },
+  { key: 'hoje',  label: 'Hoje' },
+  { key: 'todas', label: 'Todas' },
 ]
 
 // Ordenação: Data (asc, null por último) → Prioridade → Status
@@ -55,11 +53,7 @@ function filterByTab(tasks: Task[], tab: Tab): Task[] {
   if (tab === 'todas') {
     return sortTasks(tasks.filter((t) => !t.complete))
   }
-  if (tab === 'backlog') {
-    return tasks.filter((t) => t.status === 'A fazer' && !t.dueDate)
-  }
-  // someday
-  return tasks.filter((t) => !t.dueDate && t.priority === 'Baixa')
+  return tasks
 }
 
 export default function TarefasPage() {

@@ -6,17 +6,17 @@ import { clsx } from 'clsx'
 import { useHabits, useHabitRecords } from '@/hooks/useHabits'
 import HabitCheckIn from '@/components/habits/HabitCheckIn'
 import WeekGrid from '@/components/habits/WeekGrid'
-import HeatMap from '@/components/habits/HeatMap'
 import HabitPatterns from '@/components/habits/HabitPatterns'
+import MonthCalendar from '@/components/habits/MonthCalendar'
 import Spinner from '@/components/ui/Spinner'
 
-type Tab = 'hoje' | 'semana' | 'mes' | 'padroes'
+type Tab = 'hoje' | 'semana' | 'mes' | 'frequencia'
 
 const tabs: { key: Tab; label: string }[] = [
-  { key: 'hoje',    label: 'Hoje' },
-  { key: 'semana',  label: 'Semana' },
-  { key: 'mes',     label: 'Mês' },
-  { key: 'padroes', label: 'Padrões' },
+  { key: 'hoje',      label: 'Hoje' },
+  { key: 'semana',    label: 'Semana' },
+  { key: 'mes',       label: 'Mês' },
+  { key: 'frequencia', label: 'Frequência' },
 ]
 
 export default function HabitosPage() {
@@ -106,13 +106,12 @@ export default function HabitosPage() {
         {/* View: Mês */}
         {!isLoading && activeTab === 'mes' && (
           <div className="space-y-3">
-            <p className="text-xs text-neutral-600">Últimos 30 dias — todos os hábitos combinados</p>
-            {monthLoading ? <Spinner /> : <HeatMap records={monthRecords} days={30} />}
+            {monthLoading ? <Spinner /> : <MonthCalendar records={monthRecords} />}
           </div>
         )}
 
-        {/* View: Padrões */}
-        {!isLoading && activeTab === 'padroes' && (
+        {/* View: Frequência */}
+        {!isLoading && activeTab === 'frequencia' && (
           <div className="space-y-3">
             <p className="text-xs text-neutral-600">Taxa de conclusão — últimos 30 dias</p>
             {monthLoading ? <Spinner /> : <HabitPatterns habits={habits} records={monthRecords} />}
