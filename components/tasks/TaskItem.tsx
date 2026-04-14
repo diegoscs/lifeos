@@ -3,7 +3,7 @@
 import { clsx } from 'clsx'
 import { format, parseISO, isToday, isPast } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import type { Task } from '@/types'
+import type { Task, TaskStatus } from '@/types'
 
 const priorityBar: Record<string, string> = {
   Alta:  'bg-red-500',
@@ -11,18 +11,20 @@ const priorityBar: Record<string, string> = {
   Baixa: 'bg-neutral-700',
 }
 
-const priorityDot: Record<string, string> = {
-  Alta:  'text-red-400',
-  Média: 'text-yellow-400',
-  Baixa: 'text-neutral-600',
+const statusBadge: Record<TaskStatus, { label: string; className: string }> = {
+  'Em andamento': { label: 'Em andamento', className: 'bg-blue-900/50 text-blue-400 border-blue-900' },
+  'A fazer':      { label: 'A fazer',      className: 'bg-neutral-800 text-neutral-500 border-neutral-700' },
+  'Pausada':      { label: 'Pausada',      className: 'bg-yellow-900/30 text-yellow-700 border-yellow-900/50' },
+  'Completada':   { label: 'Concluída',    className: 'bg-neutral-800 text-neutral-600 border-neutral-800' },
 }
 
 interface TaskItemProps {
   task: Task
   onToggle: (task: Task) => void
+  showStatus?: boolean
 }
 
-export default function TaskItem({ task, onToggle }: TaskItemProps) {
+export default function TaskItem({ task, onToggle, showStatus = false }: TaskItemProps) {
   const barColor = task.priority ? priorityBar[task.priority] : 'bg-neutral-800'
   const isComplete = task.complete
 
@@ -34,6 +36,8 @@ export default function TaskItem({ task, onToggle }: TaskItemProps) {
         return { label: format(d, 'd MMM', { locale: ptBR }), color: 'text-neutral-600' }
       })()
     : null
+
+  const badge = showStatus && !isComplete ? statusBadge[task.status] : null
 
   return (
     <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-neutral-900 group transition-colors">
@@ -67,17 +71,20 @@ export default function TaskItem({ task, onToggle }: TaskItemProps) {
 
       {/* meta info */}
       <div className="flex items-center gap-2 shrink-0">
+        {/* badge de status */}
+        {badge && (
+          <span className={clsx(
+            'px-1.5 py-0.5 rounded text-[10px] border',
+            badge.className
+          )}>
+            {badge.label}
+          </span>
+        )}
+
         {/* badge projeto */}
         {task.projectName && (
           <span className="px-1.5 py-0.5 rounded text-[10px] bg-neutral-800 text-neutral-500 border border-neutral-800 group-hover:border-neutral-700 transition-colors truncate max-w-[80px]">
             {task.projectName}
-          </span>
-        )}
-
-        {/* prioridade — só no hover */}
-        {task.priority && !isComplete && (
-          <span className={clsx('text-[10px] hidden group-hover:inline', priorityDot[task.priority])}>
-            {task.priority}
           </span>
         )}
 

@@ -120,7 +120,8 @@ export default function HabitCheckIn({ habit, record, date, onCheckIn, onUpdate 
 
         {/* ações no hover */}
         <div className="flex items-center gap-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-          {!isFailed && (
+          {/* "não fiz" só aparece quando não há registro ainda */}
+          {!record && (
             <button
               onClick={() => setModalMode('fail')}
               className="text-xs text-neutral-700 hover:text-neutral-400 transition-colors"

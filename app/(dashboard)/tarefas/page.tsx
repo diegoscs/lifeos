@@ -7,16 +7,44 @@ import { useTasks } from '@/hooks/useTasks'
 import TaskItem from '@/components/tasks/TaskItem'
 import TaskInput from '@/components/tasks/TaskInput'
 import Spinner from '@/components/ui/Spinner'
-import type { Task } from '@/types'
+import type { Task, TaskStatus } from '@/types'
 
-type Tab = 'hoje' | 'semana' | 'backlog' | 'someday'
+type Tab = 'hoje' | 'todas' | 'backlog' | 'someday'
 
 const tabs: { key: Tab; label: string }[] = [
   { key: 'hoje',    label: 'Hoje' },
-  { key: 'semana',  label: 'Esta semana' },
+  { key: 'todas',   label: 'Todas' },
   { key: 'backlog', label: 'Backlog' },
   { key: 'someday', label: 'Algum dia' },
 ]
+
+// Ordenação: Data (asc, null por último) → Prioridade → Status
+const PRIORITY_ORDER: Record<string, number> = { Alta: 0, Média: 1, Baixa: 2 }
+const STATUS_ORDER: Record<TaskStatus, number> = {
+  'Em andamento': 0,
+  'A fazer': 1,
+  'Pausada': 2,
+  'Completada': 3,
+}
+
+function sortTasks(tasks: Task[]): Task[] {
+  return [...tasks].sort((a, b) => {
+    // Data: sem data vai para o final
+    const aDate = a.dueDate ?? 'zzzz'
+    const bDate = b.dueDate ?? 'zzzz'
+    if (aDate !== bDate) return aDate.localeCompare(bDate)
+
+    // Prioridade
+    const aPrio = PRIORITY_ORDER[a.priority ?? 'Baixa'] ?? 2
+    const bPrio = PRIORITY_ORDER[b.priority ?? 'Baixa'] ?? 2
+    if (aPrio !== bPrio) return aPrio - bPrio
+
+    // Status
+    const aStatus = STATUS_ORDER[a.status] ?? 1
+    const bStatus = STATUS_ORDER[b.status] ?? 1
+    return aStatus - bStatus
+  })
+}
 
 function filterByTab(tasks: Task[], tab: Tab): Task[] {
   if (tab === 'hoje') {
@@ -24,12 +52,13 @@ function filterByTab(tasks: Task[], tab: Tab): Task[] {
     const done = tasks.filter((t) => t.complete).slice(0, 2)
     return [...pending, ...done]
   }
+  if (tab === 'todas') {
+    return sortTasks(tasks.filter((t) => !t.complete))
+  }
   if (tab === 'backlog') {
     return tasks.filter((t) => t.status === 'A fazer' && !t.dueDate)
   }
-  if (tab === 'semana') {
-    return tasks.filter((t) => t.status !== 'Completada')
-  }
+  // someday
   return tasks.filter((t) => !t.dueDate && t.priority === 'Baixa')
 }
 
@@ -42,25 +71,32 @@ export default function TarefasPage() {
   )
 
   const visible = filterByTab(tasks, activeTab)
+  const pendingCount = tasks.filter((t) => !t.complete).length
 
   return (
     <div className="max-w-2xl space-y-4">
       {/* Tabs */}
-      <div className="flex gap-1 bg-neutral-900 rounded-lg p-1 w-fit">
-        {tabs.map(({ key, label }) => (
-          <button
-            key={key}
-            onClick={() => setActiveTab(key)}
-            className={clsx(
-              'px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
-              activeTab === key
-                ? 'bg-neutral-700 text-white'
-                : 'text-neutral-500 hover:text-neutral-300'
-            )}
-          >
-            {label}
-          </button>
-        ))}
+      <div className="flex items-center justify-between">
+        <div className="flex gap-1 bg-neutral-900 rounded-lg p-1 w-fit">
+          {tabs.map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => setActiveTab(key)}
+              className={clsx(
+                'px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
+                activeTab === key
+                  ? 'bg-neutral-700 text-white'
+                  : 'text-neutral-500 hover:text-neutral-300'
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {!isLoading && activeTab === 'todas' && (
+          <span className="text-xs text-neutral-600">{pendingCount} pendentes</span>
+        )}
       </div>
 
       {/* Lista */}
@@ -84,7 +120,12 @@ export default function TarefasPage() {
         )}
 
         {!isLoading && visible.map((task) => (
-          <TaskItem key={task.id} task={task} onToggle={toggleComplete} />
+          <TaskItem
+            key={task.id}
+            task={task}
+            onToggle={toggleComplete}
+            showStatus={activeTab === 'todas'}
+          />
         ))}
 
         <TaskInput onAdd={createTask} />
