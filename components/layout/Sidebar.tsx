@@ -11,7 +11,6 @@ const navItems = [
   { label: 'E-mails',         href: '/emails' },
   { label: 'Finanças',        href: '/financas' },
   { label: 'Projetos',        href: '/projetos' },
-  { label: 'Clientes',        href: '/clientes' },
   { label: 'Revisão Semanal', href: '/semana' },
 ]
 

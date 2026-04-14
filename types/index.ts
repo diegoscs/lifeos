@@ -85,21 +85,6 @@ export interface Project {
 }
 
 // ──────────────────────────────────────────────
-// Clientes
-// ──────────────────────────────────────────────
-export type ClientStatus = 'Prospect' | 'Ativo' | 'Concluído' | 'Pausado'
-
-export interface Client {
-  id: string
-  name: string
-  status: ClientStatus | null
-  totalValue: number | null
-  contact: string | null
-  lastInteraction: string | null
-  notes: string | null
-}
-
-// ──────────────────────────────────────────────
 // Financeiro
 // ──────────────────────────────────────────────
 export type FinanceType = 'Receita' | 'Gasto fixo' | 'Gasto variável' | 'Meta mensal' | 'NF pendente'

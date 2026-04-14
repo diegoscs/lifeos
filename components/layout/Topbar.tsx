@@ -16,7 +16,6 @@ function getPageTitle(pathname: string): string {
   if (pathname.startsWith('/emails')) return 'E-mails'
   if (pathname.startsWith('/financas')) return 'Finanças'
   if (pathname.startsWith('/projetos')) return 'Projetos'
-  if (pathname.startsWith('/clientes')) return 'Clientes'
   if (pathname.startsWith('/semana')) return 'Revisão Semanal'
   return 'LifeOS'
 }

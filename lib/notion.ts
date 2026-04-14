@@ -17,7 +17,6 @@ export const DB = {
   habits:   process.env.NOTION_HABITS_DB!,
   records:  process.env.NOTION_RECORDS_DB!,
   finance:  process.env.NOTION_FINANCE_DB!,
-  clients:  process.env.NOTION_CLIENTS_DB!,
 } as const
 
 export type NotionResult =
