@@ -3,11 +3,15 @@
 import MetricCard from '@/components/dashboard/MetricCard'
 import TasksCard from '@/components/dashboard/TasksCard'
 import HabitsCard from '@/components/dashboard/HabitsCard'
+import ProjectsCard from '@/components/dashboard/ProjectsCard'
 import PlaceholderCard from '@/components/dashboard/PlaceholderCard'
 import { useMetrics } from '@/hooks/useMetrics'
+import { useProjects } from '@/hooks/useProjects'
 
 export default function DashboardPage() {
   const { pendingToday, habitStreak, activeHabits, isLoading } = useMetrics()
+  const { projects } = useProjects()
+  const activeProjectCount = projects.filter((p) => p.status === 'Em andamento').length
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -30,8 +34,8 @@ export default function DashboardPage() {
         />
         <MetricCard
           label="Projetos ativos"
-          value="—"
-          sub="configure projetos"
+          value={isLoading ? '—' : activeProjectCount}
+          sub={`em andamento`}
         />
       </div>
 
@@ -51,10 +55,7 @@ export default function DashboardPage() {
 
       {/* Grid secundário */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <PlaceholderCard
-          title="Projetos"
-          message="Cards de projeto disponíveis no Passo 4.2."
-        />
+        <ProjectsCard />
         <PlaceholderCard
           title="Finanças"
           message="Visão financeira disponível no Passo 3.5."
