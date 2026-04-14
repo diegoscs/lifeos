@@ -10,40 +10,15 @@ const fetcher = (url: string) =>
   })
 
 export function useProjects() {
-  const { data, error, isLoading, mutate } = useSWR<Project[]>(
+  const { data, error, isLoading } = useSWR<Project[]>(
     '/api/notion/projects',
     fetcher,
     { revalidateOnFocus: false }
   )
 
-  async function updateProject(id: string, patch: { nextAction?: string }) {
-    await mutate(
-      async (current = []) => {
-        const res = await fetch('/api/notion/projects', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id, ...patch }),
-        })
-        if (!res.ok) throw new Error('Failed to update project')
-        const updated: Project = await res.json()
-        return current.map((p) => (p.id === id ? updated : p))
-      },
-      {
-        optimisticData: (current = []) =>
-          current.map((p) =>
-            p.id === id
-              ? { ...p, nextAction: patch.nextAction ?? p.nextAction }
-              : p
-          ),
-        rollbackOnError: true,
-      }
-    )
-  }
-
   return {
     projects: data ?? [],
     isLoading,
     isError: !!error,
-    updateProject,
   }
 }

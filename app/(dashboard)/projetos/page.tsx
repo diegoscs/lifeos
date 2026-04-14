@@ -23,7 +23,7 @@ const columnDot: Record<ProjectStatus, string> = {
 
 export default function ProjetosPage() {
   const [view, setView] = useState<View>('lista')
-  const { projects, isLoading, isError, updateProject } = useProjects()
+  const { projects, isLoading, isError } = useProjects()
 
   const active = projects.filter((p) => p.status !== 'Concluído')
 
@@ -79,7 +79,6 @@ export default function ProjetosPage() {
             <ProjectCard
               key={project.id}
               project={project}
-              onUpdate={updateProject}
             />
           ))}
         </div>

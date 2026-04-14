@@ -80,7 +80,6 @@ export interface Project {
   priority: TaskPriority | null
   deadline: string | null
   progress: number | null
-  nextAction: string | null
   deployUrl: string | null
 }
 
