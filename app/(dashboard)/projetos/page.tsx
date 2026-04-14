@@ -109,7 +109,6 @@ export default function ProjetosPage() {
                     <ProjectCard
                       key={project.id}
                       project={project}
-                      onUpdate={updateProject}
                     />
                   ))}
                 </div>
