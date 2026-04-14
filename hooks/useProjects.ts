@@ -16,7 +16,7 @@ export function useProjects() {
     { revalidateOnFocus: false }
   )
 
-  async function updateProject(id: string, patch: { nextAction?: string; progress?: number }) {
+  async function updateProject(id: string, patch: { nextAction?: string }) {
     await mutate(
       async (current = []) => {
         const res = await fetch('/api/notion/projects', {
@@ -32,11 +32,7 @@ export function useProjects() {
         optimisticData: (current = []) =>
           current.map((p) =>
             p.id === id
-              ? {
-                  ...p,
-                  nextAction: patch.nextAction ?? p.nextAction,
-                  progress: patch.progress ?? p.progress,
-                }
+              ? { ...p, nextAction: patch.nextAction ?? p.nextAction }
               : p
           ),
         rollbackOnError: true,

@@ -39,14 +39,12 @@ const priorityBar: Record<string, string> = {
 
 interface ProjectCardProps {
   project: Project
-  onUpdate: (id: string, patch: { nextAction?: string; progress?: number }) => Promise<void>
+  onUpdate: (id: string, patch: { nextAction?: string }) => Promise<void>
 }
 
 export default function ProjectCard({ project, onUpdate }: ProjectCardProps) {
   const [editingAction, setEditingAction] = useState(false)
   const [actionValue, setActionValue] = useState(project.nextAction ?? '')
-  const [editingProgress, setEditingProgress] = useState(false)
-  const [progressValue, setProgressValue] = useState(project.progress ?? 0)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const status = project.status ? statusConfig[project.status] : null
@@ -74,13 +72,6 @@ export default function ProjectCard({ project, onUpdate }: ProjectCardProps) {
     setEditingAction(false)
     if (actionValue !== project.nextAction) {
       await onUpdate(project.id, { nextAction: actionValue })
-    }
-  }
-
-  async function saveProgress() {
-    setEditingProgress(false)
-    if (progressValue !== project.progress) {
-      await onUpdate(project.id, { progress: progressValue })
     }
   }
 
@@ -114,42 +105,21 @@ export default function ProjectCard({ project, onUpdate }: ProjectCardProps) {
         </div>
       </div>
 
-      {/* Barra de progresso */}
-      <div className="space-y-1">
-        <div
-          className="flex items-center justify-between text-[10px] text-neutral-600 cursor-pointer"
-          onClick={() => setEditingProgress(!editingProgress)}
-        >
-          <span>Progresso</span>
-          <span>{progress}%</span>
-        </div>
-        {editingProgress ? (
-          <div className="flex items-center gap-2">
-            <input
-              type="range"
-              min={0}
-              max={100}
-              step={5}
-              value={progressValue}
-              onChange={(e) => setProgressValue(Number(e.target.value))}
-              onMouseUp={saveProgress}
-              onTouchEnd={saveProgress}
-              className="flex-1 accent-blue-500 cursor-pointer"
-            />
-            <span className="text-[10px] text-neutral-400 w-8 text-right">{progressValue}%</span>
+      {/* Barra de progresso (calculada pelas tasks) */}
+      {project.progress !== null && (
+        <div className="space-y-1">
+          <div className="flex items-center justify-between text-[10px] text-neutral-600">
+            <span>Tasks concluídas</span>
+            <span>{progress}%</span>
           </div>
-        ) : (
-          <div
-            className="h-1 bg-neutral-900 rounded-full overflow-hidden cursor-pointer"
-            onClick={() => setEditingProgress(true)}
-          >
+          <div className="h-1 bg-neutral-900 rounded-full overflow-hidden">
             <div
               className={clsx('h-full rounded-full transition-all', barColor)}
               style={{ width: `${progress}%` }}
             />
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Próxima ação */}
       <div>
