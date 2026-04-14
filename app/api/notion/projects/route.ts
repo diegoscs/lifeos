@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server'
 import { notion, DB, isFullPage, getText, getSelect, getDate, getCheckbox } from '@/lib/notion'
+import type { UpdatePageParameters } from '@notionhq/client/build/src/api-endpoints'
 import type { Project } from '@/types'
+
+type NotionProperties = NonNullable<UpdatePageParameters['properties']>
 
 function pageToProject(page: Parameters<typeof isFullPage>[0]): Project | null {
   if (!isFullPage(page)) return null
@@ -74,7 +77,7 @@ export async function PATCH(req: Request) {
       nextAction?: string
     }
 
-    const properties: Record<string, unknown> = {}
+    const properties: NotionProperties = {}
 
     if (nextAction !== undefined) {
       properties['Próxima ação'] = {
