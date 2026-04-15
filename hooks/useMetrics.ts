@@ -12,7 +12,6 @@ export function useMetrics() {
   const { records, isLoading: recordsLoading } = useHabitRecords(30)
 
   const pendingToday = tasks.filter((t) => !t.complete).length
-  const completedToday = tasks.filter((t) => t.complete).length
 
   // Streak: dias consecutivos com 100% dos hábitos
   function calcStreak(): number {
@@ -31,7 +30,6 @@ export function useMetrics() {
 
   return {
     pendingToday,
-    completedToday,
     habitStreak: calcStreak(),
     activeHabits: habits.length,
     isLoading: tasksLoading || habitsLoading || recordsLoading,
