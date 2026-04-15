@@ -28,7 +28,7 @@ export default function TasksCard() {
   const done = visibleTasks.filter((t) => t.complete || t.status === 'Pausada').slice(0, 2)
   const visible = [...pending, ...done]
 
-  const title = todayAllDone ? 'Tarefas em geral' : 'Tarefas de hoje'
+  const title = todayAllDone ? 'Tarefas a fazer' : 'Tarefas de hoje'
 
   return (
     <div className="bg-neutral-950 border border-neutral-900 rounded-xl p-4 space-y-3">
