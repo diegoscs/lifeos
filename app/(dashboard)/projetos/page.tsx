@@ -84,16 +84,16 @@ export default function ProjetosPage() {
         </div>
       )}
 
-      {/* View: Kanban */}
+      {/* View: Kanban — scroll horizontal no mobile */}
       {!isLoading && !isError && view === 'kanban' && projects.length > 0 && (
-        <div className="grid grid-cols-3 gap-4 max-w-5xl">
+        <div className="flex gap-4 overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0 md:grid md:grid-cols-3 md:max-w-5xl">
           {KANBAN_COLUMNS.map(({ status, label }) => {
             const col = projects.filter((p) => p.status === status)
             return (
-              <div key={status} className="space-y-2">
+              <div key={status} className="space-y-2 min-w-[240px] md:min-w-0">
                 {/* column header */}
                 <div className="flex items-center gap-2">
-                  <div className={clsx('w-2 h-2 rounded-full', columnDot[status])} />
+                  <div className={clsx('w-2 h-2 rounded-full shrink-0', columnDot[status])} />
                   <span className="text-xs text-neutral-500 font-medium">{label}</span>
                   <span className="text-xs text-neutral-700 ml-auto">{col.length}</span>
                 </div>

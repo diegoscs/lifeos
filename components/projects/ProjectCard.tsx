@@ -27,7 +27,7 @@ const categoryColor: Record<string, string> = {
   'Site':            'text-cyan-400',
 }
 
-const priorityBar: Record<string, string> = {
+const priorityDot: Record<string, string> = {
   Alta:  'bg-red-500',
   Média: 'bg-yellow-500',
   Baixa: 'bg-neutral-700',
@@ -48,26 +48,26 @@ export default function ProjectCard({ project }: ProjectCardProps) {
         const overdue = isPast(d) && project.status !== 'Concluído'
         return {
           label: format(d, "d 'de' MMM", { locale: ptBR }),
-          color: overdue ? 'text-red-400' : 'text-neutral-600',
+          color: overdue ? 'text-red-400' : 'text-neutral-500',
         }
       })()
     : null
 
   return (
-    <div className="bg-neutral-950 border border-neutral-900 rounded-xl p-4 space-y-3 hover:border-neutral-800 transition-colors">
+    <div className="bg-neutral-950 border border-neutral-900 rounded-xl p-4 space-y-3 hover:border-neutral-700 transition-colors group">
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2 min-w-0">
           <div className={clsx(
-            'w-1.5 h-1.5 rounded-full shrink-0',
-            project.priority ? priorityBar[project.priority] : 'bg-neutral-700'
+            'w-1.5 h-1.5 rounded-full shrink-0 mt-0.5',
+            project.priority ? priorityDot[project.priority] : 'bg-neutral-700'
           )} />
-          <h3 className="text-sm font-medium text-neutral-100 truncate">{project.name}</h3>
+          <h3 className="text-sm font-medium text-neutral-100 truncate leading-snug">{project.name}</h3>
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
           {project.category && (
-            <span className={clsx('text-[10px]', categoryColor[project.category] ?? 'text-neutral-500')}>
+            <span className={clsx('text-[10px] hidden sm:inline', categoryColor[project.category] ?? 'text-neutral-500')}>
               {project.category}
             </span>
           )}
@@ -82,16 +82,16 @@ export default function ProjectCard({ project }: ProjectCardProps) {
         </div>
       </div>
 
-      {/* Barra de progresso (calculada pelas tasks) */}
+      {/* Barra de progresso */}
       {project.progress !== null && (
-        <div className="space-y-1">
+        <div className="space-y-1.5">
           <div className="flex items-center justify-between text-[10px] text-neutral-600">
-            <span>Tasks concluídas</span>
-            <span>{progress}%</span>
+            <span>Progresso</span>
+            <span className={clsx(progress === 100 ? 'text-green-500' : 'text-neutral-500')}>{progress}%</span>
           </div>
           <div className="h-1 bg-neutral-900 rounded-full overflow-hidden">
             <div
-              className={clsx('h-full rounded-full transition-all', barColor)}
+              className={clsx('h-full rounded-full transition-all duration-500', barColor)}
               style={{ width: `${progress}%` }}
             />
           </div>
@@ -112,9 +112,12 @@ export default function ProjectCard({ project }: ProjectCardProps) {
               href={project.deployUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-[10px] text-neutral-700 hover:text-neutral-400 transition-colors"
+              className="text-[10px] text-neutral-700 hover:text-neutral-300 transition-colors flex items-center gap-1"
             >
-              ↗ Deploy
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+              </svg>
+              Deploy
             </a>
           )}
         </div>

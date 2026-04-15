@@ -35,22 +35,23 @@ export default function TaskItem({ task, onToggle, showStatus = false }: TaskIte
   const badge = showStatus && !isComplete ? statusBadge[task.status] : null
 
   return (
-    <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-neutral-900 group transition-colors">
+    <div className="flex items-center gap-3 px-3 py-3 md:py-2.5 rounded-lg hover:bg-neutral-900 group transition-colors">
       {/* barra de prioridade */}
       <div className={clsx('w-0.5 h-8 rounded-full shrink-0', barColor)} />
 
-      {/* checkbox */}
+      {/* checkbox — min 44px touch target on mobile */}
       <button
         onClick={() => onToggle(task)}
+        aria-label={isComplete ? `Desmarcar: ${task.title}` : `Concluir: ${task.title}`}
         className={clsx(
-          'w-4 h-4 rounded border shrink-0 flex items-center justify-center transition-colors',
+          'w-5 h-5 md:w-4 md:h-4 rounded border shrink-0 flex items-center justify-center transition-colors',
           isComplete
             ? 'bg-neutral-600 border-neutral-600'
             : 'border-neutral-700 hover:border-neutral-400'
         )}
       >
         {isComplete && (
-          <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 10 10">
+          <svg className="w-3 h-3 md:w-2.5 md:h-2.5 text-white" fill="none" viewBox="0 0 10 10">
             <path d="M1.5 5l2.5 2.5 4.5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         )}
@@ -66,19 +67,19 @@ export default function TaskItem({ task, onToggle, showStatus = false }: TaskIte
 
       {/* meta info */}
       <div className="flex items-center gap-2 shrink-0">
-        {/* badge de status */}
+        {/* badge de status — oculto em telas muito pequenas */}
         {badge && (
           <span className={clsx(
-            'px-1.5 py-0.5 rounded text-[10px] border',
+            'hidden sm:inline px-1.5 py-0.5 rounded text-[10px] border',
             badge.className
           )}>
             {badge.label}
           </span>
         )}
 
-        {/* badge projeto */}
+        {/* badge projeto — oculto em telas muito pequenas */}
         {task.projectName && (
-          <span className="px-1.5 py-0.5 rounded text-[10px] bg-neutral-800 text-neutral-500 border border-neutral-800 group-hover:border-neutral-700 transition-colors truncate max-w-[80px]">
+          <span className="hidden sm:inline px-1.5 py-0.5 rounded text-[10px] bg-neutral-800 text-neutral-500 border border-neutral-800 group-hover:border-neutral-700 transition-colors truncate max-w-[80px]">
             {task.projectName}
           </span>
         )}

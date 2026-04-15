@@ -24,12 +24,14 @@ export default function DashboardPage() {
           label="Tarefas hoje"
           value={isLoading ? '—' : pendingToday}
           sub="pendentes"
+          accent="indigo"
         />
         <StreakCard streak={isLoading ? '—' : longestStreak} isLoading={isLoading} />
         <MetricCard
           label="Projetos ativos"
           value={isLoading ? '—' : activeProjectCount}
-          sub={`em andamento`}
+          sub="em andamento"
+          accent="blue"
         />
       </div>
 

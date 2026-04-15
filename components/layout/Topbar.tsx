@@ -1,13 +1,7 @@
 'use client'
 
-import { useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
-import { clsx } from 'clsx'
 import { createClient } from '@/lib/supabase'
-
-type Filter = 'Tudo' | 'Trabalho' | 'Pessoal'
-
-const filters: Filter[] = ['Tudo', 'Trabalho', 'Pessoal']
 
 function getPageTitle(pathname: string): string {
   if (pathname === '/') return 'Dashboard'
@@ -20,8 +14,11 @@ function getPageTitle(pathname: string): string {
   return 'LifeOS'
 }
 
-export default function Topbar() {
-  const [active, setActive] = useState<Filter>('Tudo')
+interface TopbarProps {
+  onMenuToggle: () => void
+}
+
+export default function Topbar({ onMenuToggle }: TopbarProps) {
   const pathname = usePathname()
   const router = useRouter()
 
@@ -32,37 +29,30 @@ export default function Topbar() {
   }
 
   return (
-    <header className="h-12 shrink-0 flex items-center justify-between px-6 border-b border-neutral-900 bg-neutral-950">
-      <h1 className="text-sm font-medium text-white">{getPageTitle(pathname)}</h1>
+    <header className="h-12 shrink-0 flex items-center gap-3 px-4 md:px-6 border-b border-neutral-900 bg-neutral-950">
+      {/* Hamburger — only on mobile */}
+      <button
+        onClick={onMenuToggle}
+        className="md:hidden p-1.5 rounded-md text-neutral-500 hover:text-white hover:bg-neutral-900 transition-colors"
+        aria-label="Abrir menu de navegação"
+      >
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+        </svg>
+      </button>
 
-      <div className="flex items-center gap-4">
-        {/* Toggle Tudo / Trabalho / Pessoal */}
-        <div className="flex items-center gap-0.5 bg-neutral-900 rounded-md p-0.5">
-          {filters.map((f) => (
-            <button
-              key={f}
-              onClick={() => setActive(f)}
-              className={clsx(
-                'px-3 py-1 rounded text-xs font-medium transition-colors',
-                active === f
-                  ? 'bg-neutral-700 text-white'
-                  : 'text-neutral-500 hover:text-neutral-300'
-              )}
-            >
-              {f}
-            </button>
-          ))}
-        </div>
+      {/* Page title */}
+      <h1 className="text-sm font-medium text-white flex-1">{getPageTitle(pathname)}</h1>
 
-        {/* Avatar / logout */}
-        <button
-          onClick={handleSignOut}
-          title="Sair"
-          className="w-7 h-7 rounded-full bg-neutral-800 hover:bg-neutral-700 transition-colors flex items-center justify-center"
-        >
-          <span className="text-xs text-neutral-400 font-medium select-none">D</span>
-        </button>
-      </div>
+      {/* Avatar / logout */}
+      <button
+        onClick={handleSignOut}
+        title="Sair da conta"
+        aria-label="Sair da conta"
+        className="w-7 h-7 rounded-full bg-neutral-800 hover:bg-neutral-700 transition-colors flex items-center justify-center"
+      >
+        <span className="text-xs text-neutral-400 font-medium select-none">D</span>
+      </button>
     </header>
   )
 }
