@@ -2,6 +2,7 @@
 
 import MetricCard from '@/components/dashboard/MetricCard'
 import CompletedTasksCard from '@/components/dashboard/CompletedTasksCard'
+import StreakCard from '@/components/dashboard/StreakCard'
 import TasksCard from '@/components/dashboard/TasksCard'
 import HabitsCard from '@/components/dashboard/HabitsCard'
 import ProjectsCard from '@/components/dashboard/ProjectsCard'
@@ -10,7 +11,7 @@ import { useMetrics } from '@/hooks/useMetrics'
 import { useProjects } from '@/hooks/useProjects'
 
 export default function DashboardPage() {
-  const { pendingToday, habitStreak, activeHabits, isLoading } = useMetrics()
+  const { pendingToday, longestStreak, activeHabits, isLoading } = useMetrics()
   const { projects } = useProjects()
   const activeProjectCount = projects.filter((p) => p.status === 'Em andamento').length
 
@@ -24,11 +25,7 @@ export default function DashboardPage() {
           value={isLoading ? '—' : pendingToday}
           sub="pendentes"
         />
-        <MetricCard
-          label="Streak hábitos"
-          value={isLoading ? '—' : `${habitStreak}d`}
-          sub={`${activeHabits} hábito${activeHabits !== 1 ? 's' : ''} ativos`}
-        />
+        <StreakCard streak={isLoading ? '—' : longestStreak} isLoading={isLoading} />
         <MetricCard
           label="Projetos ativos"
           value={isLoading ? '—' : activeProjectCount}

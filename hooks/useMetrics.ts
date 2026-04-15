@@ -13,24 +13,32 @@ export function useMetrics() {
 
   const pendingToday = tasks.filter((t) => !t.complete).length
 
-  // Streak: dias consecutivos com 100% dos hábitos
-  function calcStreak(): number {
-    let streak = 0
-    for (let i = 0; i < 30; i++) {
+  // Longest streak: maior sequência de dias com 100% dos hábitos
+  function calcLongestStreak(): number {
+    if (habits.length === 0) return 0
+
+    let longestStreak = 0
+    let currentStreak = 0
+
+    for (let i = 90; i >= 0; i--) {
       const date = format(new Date(Date.now() - i * 86400000), 'yyyy-MM-dd')
       const dayRecords = records.filter((r) => r.date === date)
-      const allDone =
-        habits.length > 0 &&
-        dayRecords.filter((r) => r.completed).length >= habits.length
-      if (allDone) streak++
-      else break
+      const completedCount = dayRecords.filter((r) => r.completed).length
+
+      if (completedCount >= habits.length) {
+        currentStreak++
+        longestStreak = Math.max(longestStreak, currentStreak)
+      } else {
+        currentStreak = 0
+      }
     }
-    return streak
+
+    return longestStreak
   }
 
   return {
     pendingToday,
-    habitStreak: calcStreak(),
+    longestStreak: calcLongestStreak(),
     activeHabits: habits.length,
     isLoading: tasksLoading || habitsLoading || recordsLoading,
   }
