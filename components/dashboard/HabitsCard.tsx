@@ -42,11 +42,11 @@ export default function HabitsCard() {
       )}
 
       {!isLoading && (
-        <div className="flex gap-2 justify-between">
+        <div className="grid grid-cols-7 gap-2">
           {days.map((day) => (
             <div key={day.toISOString()} className="flex flex-col items-center gap-2">
-              <div className={clsx('w-8 h-8 rounded', getDotColor(day))} />
-              <span className="text-[11px] text-neutral-600 font-medium">
+              <div className={clsx('w-full aspect-square rounded', getDotColor(day))} />
+              <span className="text-[10px] text-neutral-600 font-medium text-center">
                 {format(day, 'EEE', { locale: ptBR })}
               </span>
             </div>
