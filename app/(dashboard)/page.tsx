@@ -9,7 +9,7 @@ import { useMetrics } from '@/hooks/useMetrics'
 import { useProjects } from '@/hooks/useProjects'
 
 export default function DashboardPage() {
-  const { pendingToday, habitStreak, activeHabits, isLoading } = useMetrics()
+  const { pendingToday, completedToday, habitStreak, activeHabits, isLoading } = useMetrics()
   const { projects } = useProjects()
   const activeProjectCount = projects.filter((p) => p.status === 'Em andamento').length
 
@@ -17,6 +17,11 @@ export default function DashboardPage() {
     <div className="space-y-6 max-w-5xl">
       {/* Métricas */}
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+        <MetricCard
+          label="Tarefas concluídas"
+          value={isLoading ? '—' : completedToday}
+          sub="hoje"
+        />
         <MetricCard
           label="Tarefas hoje"
           value={isLoading ? '—' : pendingToday}
