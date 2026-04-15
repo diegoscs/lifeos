@@ -16,7 +16,7 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6 max-w-5xl">
       {/* Métricas */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
         <MetricCard
           label="Tarefas hoje"
           value={isLoading ? '—' : pendingToday}
@@ -26,11 +26,6 @@ export default function DashboardPage() {
           label="Streak hábitos"
           value={isLoading ? '—' : `${habitStreak}d`}
           sub={`${activeHabits} hábito${activeHabits !== 1 ? 's' : ''} ativos`}
-        />
-        <MetricCard
-          label="Receita do mês"
-          value="R$ —"
-          sub="configure finanças"
         />
         <MetricCard
           label="Projetos ativos"
